@@ -198,8 +198,7 @@ textarea::placeholder {
   line-height: 1;
 }
 
-.inline-form,
-.schedule-form {
+.inline-form {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -213,12 +212,42 @@ textarea::placeholder {
 
 .schedule-form {
   display: grid;
-  grid-template-columns: 88px minmax(0, 1fr) auto auto;
+  grid-template-columns: 112px minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px;
+  margin-top: 12px;
 }
 
-.time-input {
+.schedule-field {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.schedule-field span {
+  color: #756d61;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.schedule-field input {
+  min-height: 46px;
+  border: 1px solid #ded5c8;
+  border-radius: 8px;
+  background: #fffdf8;
+  padding: 0 11px;
+}
+
+.schedule-field.time-field input {
   color: #35624d;
   font-weight: 800;
+}
+
+.schedule-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 46px;
 }
 
 .icon-button,
@@ -347,7 +376,20 @@ textarea::placeholder {
   }
 
   .schedule-form {
-    grid-template-columns: 78px minmax(0, 1fr) auto auto;
+    grid-template-columns: 1fr auto;
+  }
+
+  .schedule-field.time-field {
+    grid-column: 1 / 2;
+  }
+
+  .schedule-field:not(.time-field) {
+    grid-column: 1 / -1;
+  }
+
+  .schedule-actions {
+    grid-column: 2 / 3;
+    grid-row: 1 / 2;
   }
 
   .tiny-button {

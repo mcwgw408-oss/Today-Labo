@@ -368,35 +368,42 @@ export function App() {
         </div>
 
         <form className="schedule-form" onSubmit={saveSchedule}>
-          <input
-            className="time-input"
-            value={scheduleDraft.time}
-            onChange={(event) =>
-              setScheduleDraft((draft) => ({ ...draft, time: event.target.value }))
-            }
-            type="time"
-            aria-label="時刻"
-          />
-          <input
-            value={scheduleDraft.text}
-            onChange={(event) =>
-              setScheduleDraft((draft) => ({ ...draft, text: event.target.value }))
-            }
-            placeholder="予定を追加"
-          />
-          {scheduleDraft.editId && (
-            <button
-              className="icon-button"
-              type="button"
-              aria-label="編集をやめる"
-              onClick={() => setScheduleDraft({ time: '', text: '', editId: null })}
-            >
-              <X size={18} />
+          <label className="schedule-field time-field">
+            <span>時間</span>
+            <input
+              className="time-input"
+              value={scheduleDraft.time}
+              onChange={(event) =>
+                setScheduleDraft((draft) => ({ ...draft, time: event.target.value }))
+              }
+              type="time"
+            />
+          </label>
+          <label className="schedule-field">
+            <span>予定</span>
+            <input
+              value={scheduleDraft.text}
+              onChange={(event) =>
+                setScheduleDraft((draft) => ({ ...draft, text: event.target.value }))
+              }
+              placeholder="内容を書く"
+            />
+          </label>
+          <div className="schedule-actions">
+            {scheduleDraft.editId && (
+              <button
+                className="icon-button"
+                type="button"
+                aria-label="編集をやめる"
+                onClick={() => setScheduleDraft({ time: '', text: '', editId: null })}
+              >
+                <X size={18} />
+              </button>
+            )}
+            <button className="icon-button primary" type="submit" aria-label="予定を保存">
+              <Plus size={19} />
             </button>
-          )}
-          <button className="icon-button primary" type="submit" aria-label="予定を保存">
-            <Plus size={19} />
-          </button>
+          </div>
         </form>
 
         <div className="list">
