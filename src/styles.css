@@ -198,6 +198,19 @@ textarea::placeholder {
   line-height: 1;
 }
 
+.quick-glance p {
+  margin-top: 7px;
+  color: #332f29;
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.next-plan-card strong {
+  font-size: 1.15rem;
+}
+
 .inline-form {
   display: flex;
   align-items: center;

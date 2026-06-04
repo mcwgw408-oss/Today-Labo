@@ -123,8 +123,12 @@ export function App() {
 
   const completedCount = data.tasks.filter((task) => task.done).length;
   const nextSchedule = data.schedules
-    .filter((item) => item.time)
-    .sort((a, b) => a.time.localeCompare(b.time))[0];
+    .filter((item) => item.time || item.text.trim())
+    .sort((a, b) => {
+      if (!a.time) return 1;
+      if (!b.time) return -1;
+      return a.time.localeCompare(b.time);
+    })[0];
 
   function updateData(updater: (current: TodayData) => TodayData) {
     setData((current) => updater(current));
@@ -261,9 +265,19 @@ export function App() {
             <span>タスク</span>
             <strong>{data.tasks.length ? `${completedCount}/${data.tasks.length}` : '0'}</strong>
           </div>
-          <div>
+          <div className="next-plan-card">
             <span>次の予定</span>
-            <strong>{nextSchedule ? nextSchedule.time : '--:--'}</strong>
+            {nextSchedule ? (
+              <>
+                <strong>{nextSchedule.time || '--:--'}</strong>
+                <p>{nextSchedule.text}</p>
+              </>
+            ) : (
+              <>
+                <strong>--:--</strong>
+                <p>予定なし</p>
+              </>
+            )}
           </div>
         </div>
       </section>
