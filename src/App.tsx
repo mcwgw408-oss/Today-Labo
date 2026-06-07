@@ -1,4 +1,5 @@
 import {
+  Archive,
   CalendarClock,
   Check,
   ChevronDown,
@@ -41,6 +42,18 @@ type TodayData = {
   wins: WinItem[];
 };
 
+type DayRecord = {
+  id: string;
+  dateLabel: string;
+  createdAt: number;
+  data: TodayData;
+};
+
+type AppState = {
+  today: TodayData;
+  records: DayRecord[];
+};
+
 type TaskDraft = {
   text: string;
   editId: string | null;
@@ -55,6 +68,16 @@ type ScheduleDraft = {
 type WinDraft = {
   text: string;
   editId: string | null;
+};
+
+type RecordDraft = {
+  id: string;
+  dateLabel: string;
+  theme: string;
+  tasksText: string;
+  schedulesText: string;
+  memo: string;
+  winsText: string;
 };
 
 const STORAGE_KEY = 'today-labo-dashboard-v1';
@@ -75,6 +98,16 @@ const todayLabel = new Intl.DateTimeFormat('ja-JP', {
   weekday: 'short',
 }).format(new Date());
 
+function cloneTodayData(data: TodayData): TodayData {
+  return {
+    theme: data.theme,
+    tasks: data.tasks.map((task) => ({ ...task })),
+    schedules: data.schedules.map((item) => ({ ...item })),
+    memo: data.memo,
+    wins: data.wins.map((win) => ({ ...win })),
+  };
+}
+
 function normalizeData(value: Partial<TodayData>): TodayData {
   return {
     theme: value.theme ?? '',
@@ -85,14 +118,35 @@ function normalizeData(value: Partial<TodayData>): TodayData {
   };
 }
 
-function loadData(): TodayData {
+function normalizeState(value: Partial<AppState & TodayData>): AppState {
+  if ('today' in value || 'records' in value) {
+    return {
+      today: normalizeData(value.today ?? {}),
+      records: Array.isArray(value.records)
+        ? value.records.map((record) => ({
+            id: record.id ?? createId(),
+            dateLabel: record.dateLabel ?? todayLabel,
+            createdAt: record.createdAt ?? Date.now(),
+            data: normalizeData(record.data ?? {}),
+          }))
+        : [],
+    };
+  }
+
+  return {
+    today: normalizeData(value),
+    records: [],
+  };
+}
+
+function loadState(): AppState {
   const saved = localStorage.getItem(STORAGE_KEY);
-  if (!saved) return initialData;
+  if (!saved) return { today: initialData, records: [] };
 
   try {
-    return normalizeData(JSON.parse(saved));
+    return normalizeState(JSON.parse(saved));
   } catch {
-    return initialData;
+    return { today: initialData, records: [] };
   }
 }
 
@@ -108,8 +162,103 @@ function formatSavedAt(value: number | null) {
   }).format(new Date(value));
 }
 
+function formatRecordCreatedAt(value: number) {
+  return new Intl.DateTimeFormat('ja-JP', {
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(value));
+}
+
+function dataHasContent(data: TodayData) {
+  return (
+    data.theme.trim() ||
+    data.memo.trim() ||
+    data.tasks.length ||
+    data.schedules.length ||
+    data.wins.length
+  );
+}
+
+function recordMatches(record: DayRecord, term: string) {
+  if (!term) return true;
+  return (
+    includesTerm(record.dateLabel, term) ||
+    includesTerm(record.data.theme, term) ||
+    includesTerm(record.data.memo, term) ||
+    record.data.tasks.some((task) => includesTerm(task.text, term)) ||
+    record.data.schedules.some(
+      (item) => includesTerm(item.text, term) || includesTerm(item.time, term),
+    ) ||
+    record.data.wins.some((win) => includesTerm(win.text, term))
+  );
+}
+
+function recordToDraft(record: DayRecord): RecordDraft {
+  return {
+    id: record.id,
+    dateLabel: record.dateLabel,
+    theme: record.data.theme,
+    tasksText: record.data.tasks
+      .map((task) => `${task.done ? '[x]' : '[ ]'} ${task.text}`)
+      .join('\n'),
+    schedulesText: record.data.schedules
+      .map((item) => `${item.time ? `${item.time} ` : ''}${item.text}`)
+      .join('\n'),
+    memo: record.data.memo,
+    winsText: record.data.wins.map((win) => win.text).join('\n'),
+  };
+}
+
+function linesToTasks(value: string): Task[] {
+  return value
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const done = /^\[[xX]\]\s*/.test(line);
+      const text = line.replace(/^\[[ xX]\]\s*/, '').trim();
+      return { id: createId(), text, done };
+    });
+}
+
+function linesToSchedules(value: string): ScheduleItem[] {
+  return value
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const match = line.match(/^(\d{1,2}:\d{2})\s+(.+)$/);
+      return {
+        id: createId(),
+        time: match?.[1] ?? '',
+        text: match?.[2] ?? line,
+      };
+    })
+    .sort((a, b) => a.time.localeCompare(b.time));
+}
+
+function linesToWins(value: string): WinItem[] {
+  return value
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((text) => ({ id: createId(), text }));
+}
+
+function draftToData(draft: RecordDraft): TodayData {
+  return {
+    theme: draft.theme.trim(),
+    tasks: linesToTasks(draft.tasksText),
+    schedules: linesToSchedules(draft.schedulesText),
+    memo: draft.memo.trim(),
+    wins: linesToWins(draft.winsText),
+  };
+}
+
 export function App() {
-  const [data, setData] = useState<TodayData>(() => loadData());
+  const [state, setState] = useState<AppState>(() => loadState());
   const [query, setQuery] = useState('');
   const [taskDraft, setTaskDraft] = useState<TaskDraft>({ text: '', editId: null });
   const [scheduleDraft, setScheduleDraft] = useState<ScheduleDraft>({
@@ -118,14 +267,17 @@ export function App() {
     editId: null,
   });
   const [winDraft, setWinDraft] = useState<WinDraft>({ text: '', editId: null });
+  const [recordDraft, setRecordDraft] = useState<RecordDraft | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [saveMessage, setSaveMessage] = useState('自動保存中');
 
+  const data = state.today;
+
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     setSavedAt(Date.now());
     setSaveMessage('保存しました');
-  }, [data]);
+  }, [state]);
 
   const filtered = useMemo(() => {
     const term = query.trim();
@@ -141,6 +293,11 @@ export function App() {
     };
   }, [data, query]);
 
+  const filteredRecords = useMemo(
+    () => state.records.filter((record) => recordMatches(record, query.trim())),
+    [state.records, query],
+  );
+
   const themeMatches = !query.trim() || includesTerm(data.theme, query);
   const memoMatches = !query.trim() || includesTerm(data.memo, query);
 
@@ -153,15 +310,40 @@ export function App() {
       return a.time.localeCompare(b.time);
     })[0];
 
-  function updateData(updater: (current: TodayData) => TodayData) {
+  function updateState(updater: (current: AppState) => AppState) {
     setSaveMessage('自動保存中');
-    setData((current) => updater(current));
+    setState((current) => updater(current));
+  }
+
+  function updateData(updater: (current: TodayData) => TodayData) {
+    updateState((current) => ({ ...current, today: updater(current.today) }));
   }
 
   function saveNow() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     setSavedAt(Date.now());
     setSaveMessage('保存しました');
+  }
+
+  function saveDayRecord() {
+    if (!dataHasContent(data)) return;
+
+    updateState((current) => ({
+      today: initialData,
+      records: [
+        {
+          id: createId(),
+          dateLabel: todayLabel,
+          createdAt: Date.now(),
+          data: cloneTodayData(current.today),
+        },
+        ...current.records,
+      ],
+    }));
+
+    setTaskDraft({ text: '', editId: null });
+    setScheduleDraft({ time: '', text: '', editId: null });
+    setWinDraft({ text: '', editId: null });
   }
 
   function saveTask(event: FormEvent) {
@@ -268,6 +450,29 @@ export function App() {
     if (winDraft.editId === id) setWinDraft({ text: '', editId: null });
   }
 
+  function saveRecordEdit(event: FormEvent) {
+    event.preventDefault();
+    if (!recordDraft) return;
+
+    updateState((current) => ({
+      ...current,
+      records: current.records.map((record) =>
+        record.id === recordDraft.id
+          ? { ...record, dateLabel: recordDraft.dateLabel.trim() || record.dateLabel, data: draftToData(recordDraft) }
+          : record,
+      ),
+    }));
+    setRecordDraft(null);
+  }
+
+  function deleteRecord(id: string) {
+    updateState((current) => ({
+      ...current,
+      records: current.records.filter((record) => record.id !== id),
+    }));
+    if (recordDraft?.id === id) setRecordDraft(null);
+  }
+
   return (
     <main className="app-shell">
       <header className="top-bar">
@@ -299,7 +504,7 @@ export function App() {
         <input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="保存した内容を検索"
+          placeholder="今日と保存記録を検索"
           type="search"
         />
       </label>
@@ -343,6 +548,23 @@ export function App() {
             )}
           </div>
         </div>
+      </section>
+
+      <section className="section-block archive-block">
+        <div className="section-title">
+          <Archive size={19} aria-hidden="true" />
+          <h2>1日の終わり</h2>
+        </div>
+        <p className="helper-text">今日のテーマ、タスク、予定、メモ、できたことをまとめて1日の記録に保存します。</p>
+        <button
+          className="wide-button"
+          type="button"
+          disabled={!dataHasContent(data)}
+          onClick={saveDayRecord}
+        >
+          <Archive size={18} aria-hidden="true" />
+          今日を1日の記録として保存
+        </button>
       </section>
 
       <section className="section-block">
@@ -573,6 +795,137 @@ export function App() {
             </article>
           ))}
           {!filtered.wins.length && <p className="empty-text">夜にここを見返せます</p>}
+        </div>
+      </section>
+
+      <section className="section-block records-block">
+        <div className="section-title">
+          <Archive size={19} aria-hidden="true" />
+          <h2>保存した1日の記録</h2>
+        </div>
+
+        {recordDraft && (
+          <form className="record-edit-form" onSubmit={saveRecordEdit}>
+            <label>
+              <span>日付</span>
+              <input
+                value={recordDraft.dateLabel}
+                onChange={(event) =>
+                  setRecordDraft((draft) =>
+                    draft ? { ...draft, dateLabel: event.target.value } : draft,
+                  )
+                }
+              />
+            </label>
+            <label>
+              <span>テーマ</span>
+              <textarea
+                value={recordDraft.theme}
+                onChange={(event) =>
+                  setRecordDraft((draft) => (draft ? { ...draft, theme: event.target.value } : draft))
+                }
+                rows={2}
+              />
+            </label>
+            <label>
+              <span>タスク</span>
+              <textarea
+                value={recordDraft.tasksText}
+                onChange={(event) =>
+                  setRecordDraft((draft) =>
+                    draft ? { ...draft, tasksText: event.target.value } : draft,
+                  )
+                }
+                rows={4}
+              />
+            </label>
+            <label>
+              <span>予定</span>
+              <textarea
+                value={recordDraft.schedulesText}
+                onChange={(event) =>
+                  setRecordDraft((draft) =>
+                    draft ? { ...draft, schedulesText: event.target.value } : draft,
+                  )
+                }
+                rows={3}
+              />
+            </label>
+            <label>
+              <span>メモ</span>
+              <textarea
+                value={recordDraft.memo}
+                onChange={(event) =>
+                  setRecordDraft((draft) => (draft ? { ...draft, memo: event.target.value } : draft))
+                }
+                rows={4}
+              />
+            </label>
+            <label>
+              <span>できたこと</span>
+              <textarea
+                value={recordDraft.winsText}
+                onChange={(event) =>
+                  setRecordDraft((draft) =>
+                    draft ? { ...draft, winsText: event.target.value } : draft,
+                  )
+                }
+                rows={3}
+              />
+            </label>
+            <div className="record-form-actions">
+              <button className="text-button" type="button" onClick={() => setRecordDraft(null)}>
+                <X size={17} aria-hidden="true" />
+                やめる
+              </button>
+              <button className="text-button primary" type="submit">
+                <Save size={17} aria-hidden="true" />
+                記録を保存
+              </button>
+            </div>
+          </form>
+        )}
+
+        <div className="record-list">
+          {filteredRecords.map((record) => {
+            const doneCount = record.data.tasks.filter((task) => task.done).length;
+            return (
+              <article className="record-card" key={record.id}>
+                <div className="record-head">
+                  <div>
+                    <strong>{record.dateLabel}</strong>
+                    <span>{formatRecordCreatedAt(record.createdAt)} 保存</span>
+                  </div>
+                  <div className="record-actions">
+                    <button
+                      className="action-button"
+                      type="button"
+                      onClick={() => setRecordDraft(recordToDraft(record))}
+                    >
+                      <Edit3 size={14} aria-hidden="true" />
+                      編集
+                    </button>
+                    <button
+                      className="action-button danger"
+                      type="button"
+                      onClick={() => deleteRecord(record.id)}
+                    >
+                      <Trash2 size={14} aria-hidden="true" />
+                      削除
+                    </button>
+                  </div>
+                </div>
+                {record.data.theme && <p className="record-theme">{record.data.theme}</p>}
+                <div className="record-summary">
+                  <span>タスク {doneCount}/{record.data.tasks.length}</span>
+                  <span>予定 {record.data.schedules.length}</span>
+                  <span>できた {record.data.wins.length}</span>
+                </div>
+                {record.data.memo && <p className="record-memo">{record.data.memo}</p>}
+              </article>
+            );
+          })}
+          {!filteredRecords.length && <p className="empty-text">まだ1日の記録はありません</p>}
         </div>
       </section>
 
