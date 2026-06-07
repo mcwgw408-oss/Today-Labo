@@ -84,6 +84,35 @@ h2 {
   padding: 10px 12px;
 }
 
+.save-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+  border: 1px solid #dce8de;
+  border-radius: 8px;
+  background: #f8fffa;
+  padding: 10px 10px 10px 12px;
+}
+
+.save-panel div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.save-panel strong {
+  color: #235f46;
+  font-size: 0.92rem;
+}
+
+.save-panel span {
+  color: #756d61;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
 .search-box {
   display: flex;
   align-items: center;
@@ -264,10 +293,13 @@ textarea::placeholder {
 }
 
 .icon-button,
+.text-button,
+.action-button,
 .tiny-button,
 .check-button {
-  display: inline-grid;
-  place-items: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex: 0 0 auto;
   border: 0;
   cursor: pointer;
@@ -284,6 +316,39 @@ textarea::placeholder {
 .icon-button.primary {
   background: #235f46;
   color: #ffffff;
+}
+
+.text-button,
+.action-button {
+  gap: 5px;
+  min-height: 36px;
+  border-radius: 8px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.text-button {
+  padding: 0 12px;
+  background: #efe8dc;
+  color: #3f3a33;
+}
+
+.text-button.primary {
+  background: #235f46;
+  color: #ffffff;
+}
+
+.action-button {
+  min-height: 32px;
+  padding: 0 8px;
+  background: #f1eadf;
+  color: #4b443b;
+  font-size: 0.78rem;
+}
+
+.action-button.danger {
+  background: #fff0ed;
+  color: #9c463c;
 }
 
 .list {
@@ -332,7 +397,10 @@ textarea::placeholder {
 .item-actions {
   display: flex;
   align-items: center;
-  gap: 2px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+  max-width: 132px;
 }
 
 .tiny-button {
@@ -377,6 +445,14 @@ textarea::placeholder {
   padding: 8px 2px 0;
 }
 
+.mobile-note {
+  color: #8a8073;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-align: center;
+  padding: 4px 0 0;
+}
+
 @media (max-width: 359px) {
   .app-shell {
     padding-left: 10px;
@@ -407,5 +483,30 @@ textarea::placeholder {
 
   .tiny-button {
     width: 27px;
+  }
+
+  .item-actions {
+    max-width: 120px;
+  }
+
+  .action-button {
+    padding: 0 6px;
+  }
+}
+
+@media (min-width: 520px) {
+  body {
+    background:
+      linear-gradient(90deg, rgba(35, 95, 70, 0.08), rgba(180, 118, 43, 0.07)),
+      #f7f4ee;
+  }
+
+  .app-shell {
+    min-height: calc(100vh - 32px);
+    margin: 16px auto;
+    border: 1px solid #e2dacd;
+    border-radius: 24px;
+    background: #f7f4ee;
+    box-shadow: 0 24px 70px rgba(44, 38, 29, 0.14);
   }
 }

@@ -8,6 +8,7 @@ import {
   GripVertical,
   Lightbulb,
   Plus,
+  Save,
   Search,
   Sparkles,
   Trash2,
@@ -74,12 +75,22 @@ const todayLabel = new Intl.DateTimeFormat('ja-JP', {
   weekday: 'short',
 }).format(new Date());
 
+function normalizeData(value: Partial<TodayData>): TodayData {
+  return {
+    theme: value.theme ?? '',
+    tasks: Array.isArray(value.tasks) ? value.tasks : [],
+    schedules: Array.isArray(value.schedules) ? value.schedules : [],
+    memo: value.memo ?? '',
+    wins: Array.isArray(value.wins) ? value.wins : [],
+  };
+}
+
 function loadData(): TodayData {
   const saved = localStorage.getItem(STORAGE_KEY);
   if (!saved) return initialData;
 
   try {
-    return { ...initialData, ...JSON.parse(saved) };
+    return normalizeData(JSON.parse(saved));
   } catch {
     return initialData;
   }
@@ -87,6 +98,14 @@ function loadData(): TodayData {
 
 function includesTerm(value: string, term: string) {
   return value.toLowerCase().includes(term.toLowerCase());
+}
+
+function formatSavedAt(value: number | null) {
+  if (!value) return '未保存';
+  return new Intl.DateTimeFormat('ja-JP', {
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(value));
 }
 
 export function App() {
@@ -99,9 +118,13 @@ export function App() {
     editId: null,
   });
   const [winDraft, setWinDraft] = useState<WinDraft>({ text: '', editId: null });
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [saveMessage, setSaveMessage] = useState('自動保存中');
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    setSavedAt(Date.now());
+    setSaveMessage('保存しました');
   }, [data]);
 
   const filtered = useMemo(() => {
@@ -131,7 +154,14 @@ export function App() {
     })[0];
 
   function updateData(updater: (current: TodayData) => TodayData) {
+    setSaveMessage('自動保存中');
     setData((current) => updater(current));
+  }
+
+  function saveNow() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    setSavedAt(Date.now());
+    setSaveMessage('保存しました');
   }
 
   function saveTask(event: FormEvent) {
@@ -166,9 +196,7 @@ export function App() {
         return {
           ...current,
           schedules: current.schedules
-            .map((item) =>
-              item.id === scheduleDraft.editId ? { ...item, ...nextItem } : item,
-            )
+            .map((item) => (item.id === scheduleDraft.editId ? { ...item, ...nextItem } : item))
             .sort((a, b) => a.time.localeCompare(b.time)),
         };
       }
@@ -216,12 +244,36 @@ export function App() {
     });
   }
 
+  function deleteTask(id: string) {
+    updateData((current) => ({
+      ...current,
+      tasks: current.tasks.filter((task) => task.id !== id),
+    }));
+    if (taskDraft.editId === id) setTaskDraft({ text: '', editId: null });
+  }
+
+  function deleteSchedule(id: string) {
+    updateData((current) => ({
+      ...current,
+      schedules: current.schedules.filter((item) => item.id !== id),
+    }));
+    if (scheduleDraft.editId === id) setScheduleDraft({ time: '', text: '', editId: null });
+  }
+
+  function deleteWin(id: string) {
+    updateData((current) => ({
+      ...current,
+      wins: current.wins.filter((win) => win.id !== id),
+    }));
+    if (winDraft.editId === id) setWinDraft({ text: '', editId: null });
+  }
+
   return (
     <main className="app-shell">
       <header className="top-bar">
         <div>
           <p className="date-label">{todayLabel}</p>
-          <h1>今日</h1>
+          <h1>Today Labo</h1>
         </div>
         <div className="progress-pill">
           <Check size={16} aria-hidden="true" />
@@ -231,12 +283,23 @@ export function App() {
         </div>
       </header>
 
+      <section className="save-panel" aria-live="polite">
+        <div>
+          <strong>{saveMessage}</strong>
+          <span>最終保存 {formatSavedAt(savedAt)}</span>
+        </div>
+        <button className="text-button primary" type="button" onClick={saveNow}>
+          <Save size={17} aria-hidden="true" />
+          保存
+        </button>
+      </section>
+
       <label className="search-box">
         <Search size={18} aria-hidden="true" />
         <input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="今日の中から検索"
+          placeholder="保存した内容を検索"
           type="search"
         />
       </label>
@@ -304,8 +367,9 @@ export function App() {
               <X size={18} />
             </button>
           )}
-          <button className="icon-button primary" type="submit" aria-label="タスクを保存">
-            <Plus size={19} />
+          <button className="text-button primary" type="submit">
+            {taskDraft.editId ? <Check size={17} /> : <Plus size={18} />}
+            保存
           </button>
         </form>
 
@@ -348,25 +412,16 @@ export function App() {
                   <ChevronDown size={16} />
                 </button>
                 <button
-                  className="tiny-button"
+                  className="action-button"
                   type="button"
-                  aria-label="編集"
                   onClick={() => setTaskDraft({ text: task.text, editId: task.id })}
                 >
-                  <Edit3 size={15} />
+                  <Edit3 size={14} aria-hidden="true" />
+                  編集
                 </button>
-                <button
-                  className="tiny-button danger"
-                  type="button"
-                  aria-label="削除"
-                  onClick={() =>
-                    updateData((current) => ({
-                      ...current,
-                      tasks: current.tasks.filter((item) => item.id !== task.id),
-                    }))
-                  }
-                >
-                  <Trash2 size={15} />
+                <button className="action-button danger" type="button" onClick={() => deleteTask(task.id)}>
+                  <Trash2 size={14} aria-hidden="true" />
+                  削除
                 </button>
               </div>
             </article>
@@ -414,8 +469,9 @@ export function App() {
                 <X size={18} />
               </button>
             )}
-            <button className="icon-button primary" type="submit" aria-label="予定を保存">
-              <Plus size={19} />
+            <button className="text-button primary" type="submit">
+              {scheduleDraft.editId ? <Check size={17} /> : <Plus size={18} />}
+              保存
             </button>
           </div>
         </form>
@@ -427,27 +483,22 @@ export function App() {
               <p>{item.text}</p>
               <div className="item-actions">
                 <button
-                  className="tiny-button"
+                  className="action-button"
                   type="button"
-                  aria-label="編集"
                   onClick={() =>
                     setScheduleDraft({ time: item.time, text: item.text, editId: item.id })
                   }
                 >
-                  <Edit3 size={15} />
+                  <Edit3 size={14} aria-hidden="true" />
+                  編集
                 </button>
                 <button
-                  className="tiny-button danger"
+                  className="action-button danger"
                   type="button"
-                  aria-label="削除"
-                  onClick={() =>
-                    updateData((current) => ({
-                      ...current,
-                      schedules: current.schedules.filter((entry) => entry.id !== item.id),
-                    }))
-                  }
+                  onClick={() => deleteSchedule(item.id)}
                 >
-                  <Trash2 size={15} />
+                  <Trash2 size={14} aria-hidden="true" />
+                  削除
                 </button>
               </div>
             </article>
@@ -466,7 +517,7 @@ export function App() {
             className="memo-input"
             value={data.memo}
             onChange={(event) => updateData((current) => ({ ...current, memo: event.target.value }))}
-            placeholder="思いついたことをすぐ書く"
+            placeholder="思いついたことを残す"
             rows={6}
           />
         )}
@@ -494,8 +545,9 @@ export function App() {
               <X size={18} />
             </button>
           )}
-          <button className="icon-button primary" type="submit" aria-label="できたことを保存">
-            <Plus size={19} />
+          <button className="text-button primary" type="submit">
+            {winDraft.editId ? <Check size={17} /> : <Plus size={18} />}
+            保存
           </button>
         </form>
 
@@ -506,25 +558,16 @@ export function App() {
               <p>{win.text}</p>
               <div className="item-actions">
                 <button
-                  className="tiny-button"
+                  className="action-button"
                   type="button"
-                  aria-label="編集"
                   onClick={() => setWinDraft({ text: win.text, editId: win.id })}
                 >
-                  <Edit3 size={15} />
+                  <Edit3 size={14} aria-hidden="true" />
+                  編集
                 </button>
-                <button
-                  className="tiny-button danger"
-                  type="button"
-                  aria-label="削除"
-                  onClick={() =>
-                    updateData((current) => ({
-                      ...current,
-                      wins: current.wins.filter((item) => item.id !== win.id),
-                    }))
-                  }
-                >
-                  <Trash2 size={15} />
+                <button className="action-button danger" type="button" onClick={() => deleteWin(win.id)}>
+                  <Trash2 size={14} aria-hidden="true" />
+                  削除
                 </button>
               </div>
             </article>
@@ -532,6 +575,8 @@ export function App() {
           {!filtered.wins.length && <p className="empty-text">夜にここを見返せます</p>}
         </div>
       </section>
+
+      <p className="mobile-note">スマホ画面専用アプリです</p>
     </main>
   );
 }
