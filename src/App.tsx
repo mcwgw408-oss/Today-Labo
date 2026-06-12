@@ -81,6 +81,9 @@ type RecordDraft = {
 };
 
 const STORAGE_KEY = 'today-labo-dashboard-v1';
+// 「今日」が何日のデータかを覚えるための別キー。
+// 既存データ(STORAGE_KEY)の構造には手を加えないため、日付だけを分けて保存する。
+const DATE_KEY = 'today-labo-current-date-v1';
 
 const initialData: TodayData = {
   theme: '',
@@ -97,6 +100,77 @@ const todayLabel = new Intl.DateTimeFormat('ja-JP', {
   day: 'numeric',
   weekday: 'short',
 }).format(new Date());
+
+// 端末のローカル時間で 'YYYY-MM-DD' を作る（日付の比較用）
+function localDateKey(date = new Date()) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+// 'YYYY-MM-DD' から「6月12日(金)」形式の表示を作る
+function labelFromDateKey(key: string) {
+  const [y, m, d] = key.split('-').map(Number);
+  return new Intl.DateTimeFormat('ja-JP', {
+    month: 'long',
+    day: 'numeric',
+    weekday: 'short',
+  }).format(new Date(y, m - 1, d));
+}
+
+// 未完了タスクだけを新しいIDで複製する（今日へ引き継ぐ用）
+function unfinishedTasks(data: TodayData): Task[] {
+  return data.tasks
+    .filter((task) => !task.done)
+    .map((task) => ({ id: createId(), text: task.text, done: false }));
+}
+
+// 日付が変わっていたら:
+// 1. 前日の内容が残っていれば「前日の日付」で記録へ自動保存し、未完了タスクを今日へ引き継ぐ
+// 2. 前日の内容が空（夜に手動保存済み）なら、昨日保存された最新の記録から未完了タスクを引き継ぐ
+function rolloverState(state: AppState): AppState {
+  const todayKey = localDateKey();
+  const storedKey = localStorage.getItem(DATE_KEY);
+  localStorage.setItem(DATE_KEY, todayKey);
+
+  // 初回起動時は日付を覚えるだけ（既存データが何日のものか分からないため触らない）
+  if (!storedKey || storedKey === todayKey) return state;
+
+  if (dataHasContent(state.today)) {
+    return {
+      today: {
+        theme: '',
+        tasks: unfinishedTasks(state.today),
+        schedules: [],
+        memo: '',
+        wins: [],
+      },
+      records: [
+        {
+          id: createId(),
+          dateLabel: labelFromDateKey(storedKey),
+          createdAt: Date.now(),
+          data: cloneTodayData(state.today),
+        },
+        ...state.records,
+      ],
+    };
+  }
+
+  const latest = state.records[0];
+  if (latest && localDateKey(new Date(latest.createdAt)) === storedKey) {
+    const carried = unfinishedTasks(latest.data);
+    if (carried.length) {
+      return {
+        ...state,
+        today: { theme: '', tasks: carried, schedules: [], memo: '', wins: [] },
+      };
+    }
+  }
+
+  return state;
+}
 
 function cloneTodayData(data: TodayData): TodayData {
   return {
@@ -258,7 +332,7 @@ function draftToData(draft: RecordDraft): TodayData {
 }
 
 export function App() {
-  const [state, setState] = useState<AppState>(() => loadState());
+  const [state, setState] = useState<AppState>(() => rolloverState(loadState()));
   const [query, setQuery] = useState('');
   const [taskDraft, setTaskDraft] = useState<TaskDraft>({ text: '', editId: null });
   const [scheduleDraft, setScheduleDraft] = useState<ScheduleDraft>({
@@ -278,6 +352,16 @@ export function App() {
     setSavedAt(Date.now());
     setSaveMessage('保存しました');
   }, [state]);
+
+  // スマホでアプリを閉じずに置いていた場合、翌朝画面に戻った瞬間に日付切り替えを行う
+  useEffect(() => {
+    const checkRollover = () => {
+      if (document.visibilityState !== 'visible') return;
+      setState((current) => rolloverState(current));
+    };
+    document.addEventListener('visibilitychange', checkRollover);
+    return () => document.removeEventListener('visibilitychange', checkRollover);
+  }, []);
 
   const filtered = useMemo(() => {
     const term = query.trim();
